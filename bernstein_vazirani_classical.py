@@ -10,18 +10,12 @@
 def solve(data) -> dict:
     ''' returns the answer as a binary string '''
     nbits = data['nbits']
-    top = pow(2, nbits)
-
-    ftrue = set()
-    for i in data['f']:
-        ftrue.add(i)
+    ftrue = set(data['f'])
 
     s = 0
-    i = 1
-    while i < top:
+    for i in (2**p for p in range(nbits)):
         if i in ftrue:
             s |= i
-        i <<= 1
 
     result = f"{s:b}".zfill(nbits)
     return {'answer': result}
