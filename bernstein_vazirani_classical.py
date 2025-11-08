@@ -18,7 +18,7 @@ def solve(data) -> dict:
     # f has been defined, now we treat it as a black box.
     # Past this point, we pretend that we don't know anything
     # about f and we try to determine S.
-  
+
     s = 0
     for i in (2**p for p in range(nbits)):
         if f(i):
