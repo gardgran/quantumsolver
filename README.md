@@ -6,13 +6,15 @@ for problems.
 To run this, create a python virtual environment and "enter" it
 
 ```
-cd [the location of this README.md
+cd the-location-of-this-README.md
 python3 -m venv .venv
 ```
 
 For Windows:
 
-```.venv\scripts\Activate.bat```
+```
+.venv\scripts\Activate.bat
+```
 
 For anything else:
 
