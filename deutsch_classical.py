@@ -1,27 +1,7 @@
 """This is a classical solver for the Deutsch problem"""
 
 
-def f1(x: bool) -> bool:  # pylint: disable=unused-argument
-    """Constant function that always returns true"""
-    return True
-
-
-def f2(x: bool) -> bool:  # pylint: disable=unused-argument
-    """Constant function that always returns false"""
-    return False
-
-
-def f3(x: bool) -> bool:
-    """Balanced function that returns the input as is"""
-    return x
-
-
-def f4(x: bool) -> bool:
-    """Balanced function that returns the negation of the input"""
-    return not x
-
-
-def solve(data) -> dict:
+def solve(data: list) -> dict:
     """We expect the incoming json schema to be a list of length two.
     Each entry is either true or false. The first number represents
     f(false), and the second represents f(true)
