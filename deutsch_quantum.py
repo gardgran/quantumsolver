@@ -1,8 +1,9 @@
 """
 Deutsch Quantum Solver
 
-Input - dictionary
-{'case' : 'f1'} (f1, f2, f3, f4)
+Input - list
+Representing the states of 2 bits
+[0,0], [0,1], [1,0], [1,1]
 TODO: Coordinate how Problem group will send oracle
 Code will need to be modified based on that
 
@@ -19,75 +20,63 @@ import matplotlib.pyplot as plt
 from qiskit import QuantumCircuit, transpile
 from qiskit_aer import AerSimulator
 
-def deutsch_oracle(case: str) -> QuantumCircuit:
+def deutsch_function(case: int) -> QuantumCircuit:
     """
-    2-qubit oracle U_f acting on |x,y> where y is the target.
-    This is just for testing purposes,
-    for the project this will be provided by the problem team.
+    Creates a quantum circuit just for the oracle
+    Depending on the state given:
+    f1 - Do nothing
+    f2 - CNOT
+    f3 - CNOT, Not
+    f4 - Not
     """
-    oracle = QuantumCircuit(2)
+    if case not in [1, 2, 3, 4]:
+        raise ValueError("'case' must be 1, 2, 3, or 4")
     
-    if case == "f1":    # constant 0: do nothing
-        pass
-    elif case == "f2":  # constant 1: flip the target bit
-        oracle.x(1)
-    elif case == "f3":  # balanced: f(x) = x, use CNOT
-        oracle.cx(0,1)
-    elif case == "f4":  # balanced: f(x) = not x
-        oracle.x(0)
-        oracle.cx(0, 1)
-        oracle.x(0)
-    else:
-        raise ValueError(f"Unknown case '{case}'. Use one of f1, f2, f3, f4.")
-    return oracle
+    f = QuantumCircuit(2)
+    if case in [2, 3]:
+        f.cx(0, 1)
+    if case in [3, 4]:
+        f.x(1)
+    return f
 
-def deutsch_solver(case: str, shots: int = 1024) -> dict:
+def compile_circuit(function: QuantumCircuit) -> QuantumCircuit:
     """
-    Run Deutsch's algorithm for the given oracle case and return the dictionary
-    {'answer': 'constant'|'balanced'} 
+    Builds the circuit around the oracle
     """
     # create circuit with 2 qubits and 1 classial bit.
-    qc = QuantumCircuit(2, 1)
+    n = function.num_qubits - 1
+    qc = QuantumCircuit(n + 1, n)
 
     # prepare |1>, and put both qubits in superpostition
-    qc.x(1)
-    qc.h(0)
-    qc.h(1)
+    qc.x(n)
+    qc.h(range(n + 1))
 
     # apply the oracle
-    qc.compose(deutsch_oracle(case), inplace=True)
+    qc.compose(function, inplace=True)
 
     # hadamard on the first qubit and measure
-    qc.h(0)
-    qc.measure(0,0)
+    qc.h(range(n))
+    qc.measure(range(n),range(n))
 
-    # run on simulator - note some code he is overkill for a simulator, 
-    # but included in the event it would run on an actual QPC.
-    sim = AerSimulator(seed_simulator=42)
-    tqc = transpile(qc, sim)
-    result = sim.run(tqc, shots=shots).result()
-    counts = result.get_counts()
+    return qc
 
-    # Majority vote on the measured bit of qubit-0
-    bit = max(counts, key=counts.get)   # '0' or '1'
-    answer = "constant" if bit == '0' else "balanced"
+def deutsch_algorithm(function: QuantumCircuit) -> dict:
+    """
+    Runs the compiled circuit (with oracle) in the Qiskit simulator
+    Returns constant if measurements are the same
+    Returns balanced if measurements are opposite
+    """
+    qc = compile_circuit(function)
 
-    # Create Diagram 
-    # uncomment here and in return statement to implement
-    # png_b64 = circuit_png_base64(qc)
-
-    # Return
-    return {
-        "answer": answer,
-        # "diagram_format": "png_base64",
-        # "diagram_png": png_b64
-        }
+    result = AerSimulator().run(qc, shots=1, memory=True).result()
+    measurements = result.get_memory()
+    answer = "constant" if measurements[0] == '0' else "balanced"
+    return {"answer": answer}
 
 def circuit_png_base64(qc: QuantumCircuit) -> str:
     """
     Create diagram of circuit
     Currently just for fun and testing
-    Output is a 64bit encoding. It works with Postman
     """
     fig = qc.draw(output='mpl')
     buf = io.BytesIO()
@@ -97,19 +86,29 @@ def circuit_png_base64(qc: QuantumCircuit) -> str:
     plt.close(fig)
     return data
 
-def solve(data) -> dict:
+def solve(data: list) -> dict:
     """
     Main entry point
-    Interface between deutsch solver and flask
+    Determine which case is given by the input
     """
-    case = data.get("case")
-    if case not in {"f1", "f2", "f3", "f4"}:
-        return {"error": "invalid or missing case (use f1,f2,f3,f4)"}
-    return deutsch_solver(case)
+    
+    if data[0]:
+        if data[1]:
+            f = deutsch_function(4)  # [1, 1] f4
+        else:
+            f = deutsch_function(3)  # [1, 0] f3
+    else:
+        if data[1]:
+            f = deutsch_function(2)  # [0, 1] f2
+        else:
+            f = deutsch_function(1)  # [0, 0] f1 
+    return(deutsch_algorithm(f))
 
 
+if __name__ == "__main__":
+    assert solve([0, 0])["answer"] == "constant"
+    assert solve([1, 1])["answer"] == "constant"
+    assert solve([0, 1])["answer"] == "balanced"
+    assert solve([1, 0])["answer"] == "balanced"
+    print("All tests passed")
 
-"""
-TODO: right now it implements via selecting which case to send.
-Research how we will get the information via the problem group.
-"""
