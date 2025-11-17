@@ -4,6 +4,7 @@ from flask import request
 from app import app
 import deutsch_classical
 import bernstein_vazirani_classical
+import bernstein_vazirani_quantum
 import deutsch_quantum
 
 # pylint: disable=missing-function-docstring
@@ -26,6 +27,13 @@ def solver_bz_classical():
         return "expected json input"
     data = request.json
     return bernstein_vazirani_classical.solve(data)
+
+@app.route('/bernstein-vazirani-quantum', methods=['POST'])
+def solver_bz_quantum():
+    if not request.is_json:
+        return "expected json input"
+    data = request.json
+    return bernstein_vazirani_quantum.solve(data)
 
 @app.route('/deutsch-quantum', methods=['POST'])
 def solver_deutsch_quantum():
