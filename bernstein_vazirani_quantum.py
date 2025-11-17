@@ -132,7 +132,9 @@ def main():
         tryit(fullurl, 3, [1, 2, 4, 7], "111", args.show_circuits)
         tryit(fullurl, 3, [],  "000", args.show_circuits)
         tryit(fullurl, 3, [1, 3, 5, 7], "001", args.show_circuits)
-        print("All tests passed")
+        if fullurl is None:
+            fullurl = "local"
+        print(f"All tests passed ({fullurl})")
         return
 
     for nbits, s, ftrue in generate_all(args.generate):
