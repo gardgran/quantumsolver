@@ -16,7 +16,6 @@ import json
 import requests
 from qiskit import QuantumCircuit, qasm2
 from qiskit_aer import AerSimulator
-import deutsch_jozsa_quantum
 
 
 def bv_query(s):
@@ -30,9 +29,22 @@ def bv_query(s):
     return qc
 
 
+def compile_circuit(function: QuantumCircuit):
+    """Compiles a circuit for use in the Deutsch-Jozsa algorithm."""
+
+    n = function.num_qubits - 1
+    qc = QuantumCircuit(n + 1, n)
+    qc.x(n)
+    qc.h(range(n + 1))
+    qc.compose(function, inplace=True)
+    qc.h(range(n))
+    qc.measure(range(n), range(n))
+    return qc
+
+
 def bv_algorithm(function: QuantumCircuit):
     """Runs the Bernstein-Vazirani algorithm using the given function"""
-    qc = deutsch_jozsa_quantum.compile_circuit(function)
+    qc = compile_circuit(function)
     result = AerSimulator().run(qc, shots=1, memory=True).result()
     return (result.get_memory()[0], qc)
 
