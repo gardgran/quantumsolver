@@ -14,6 +14,7 @@ The result is a dictionary:
 """
 
 import argparse
+import requests
 from qiskit import QuantumCircuit, qasm2
 from qiskit_aer import AerSimulator
 
@@ -49,7 +50,7 @@ def dj_constant(num_qubits, output=True):
     return qc
 
 
-def dj_balanced(num_qubits, values):
+def dj_balanced(num_qubits, fbits):
     """Return a balanced DJ function circuit."""
 
     qc = QuantumCircuit(num_qubits + 1)
@@ -60,11 +61,12 @@ def dj_balanced(num_qubits, values):
                 qc.x(qubit)
         return qc
 
-    for state in values:
-        qc.barrier()
-        qc = add_cx(qc, f"{state:0b}")
-        qc.mcx(list(range(num_qubits)), num_qubits)
-        qc = add_cx(qc, f"{state:0b}")
+    for state, fbit in enumerate(fbits):
+        if fbit:
+            qc.barrier()
+            qc = add_cx(qc, f"{state:0b}")
+            qc.mcx(list(range(num_qubits)), num_qubits)
+            qc = add_cx(qc, f"{state:0b}")
 
     qc.barrier()
     return qc
@@ -74,43 +76,90 @@ def solve(data) -> dict:
     """Solves the Deutsch-Jozsa problem for the given function data.
     The input data is a json schema:
     {'nbits': N,
-     'values': [list of integers X where f(X) = true]}
+     'f': [list of integers of length 2^nbits: f[x] = f(x) = {0, 1}}
     """
 
     nbits = data["nbits"]
-    values = set(data["values"])
+    fbits = [bool(x) for x in data["f"]]
 
-    if len(values) == 0:
+    if sum(fbits) == 0:
         func = dj_constant(nbits, output=False)
-    elif len(values) == 2**nbits:
+    elif len(fbits) == sum(fbits):
         func = dj_constant(nbits, output=True)
     else:
-        func = dj_balanced(nbits, values)
+        func = dj_balanced(nbits, fbits)
 
     (answer, qc) = dj_algorithm(func)
     return {"answer": answer, "qasm": qasm2.dumps(qc)}
 
 
-def testit(data, expected, show_circuits=False):
+def testit(url, data, expected, show_circuits=False):
     """Test the deutsch-jozsa solver with given data and expected result."""
-    result = solve(data)
+
+    if url is None:
+        result = solve(data)
+    else:
+        req = requests.post(url, json=data, timeout=5)
+        assert req.status_code == 200, f"HTTP error {req.status_code} for data={data}"
+        result = req.json()
+
     assert (
         result["answer"] == expected
     ), f"expected {expected}, got {result['answer']} for {data}"
-    if show_circuits:
-        print(f"Deutsch-Jozsa circuit for input {data}:")
+    if show_circuits and "qasm" in result:
+        print(f"// Deutsch-Jozsa circuit for input {data}:")
         print(result["qasm"])
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--show-circuits", action="store_true")
+def main():
+    """Internal/server testing of solver"""
+    parser = argparse.ArgumentParser(description="Deutsch-Jozsa Quantum Solver")
+    parser.add_argument(
+        "--baseurl",
+        type=str,
+        default=None,
+        help="Base URL for the quantum solver to test against.",
+    )
+    parser.add_argument(
+        "--endpoint",
+        type=str,
+        default="deutsch-jozsa-quantum",
+        help="Endpoint for the classical solver.",
+    )
+    parser.add_argument(
+        "--show-circuits",
+        action="store_true",
+        help="Show the generated quantum circuits.",
+    )
     args = parser.parse_args()
 
-    testit({"nbits": 3, "values": []}, "constant", args.show_circuits)
+    url = None
+    if args.baseurl is not None:
+        url = f"{args.baseurl}/{args.endpoint}"
+
     testit(
-        {"nbits": 3, "values": [0, 1, 2, 3, 4, 5, 6, 7]}, "constant", args.show_circuits
+        url, {"nbits": 3, "f": [0, 0, 0, 0, 0, 0, 0, 0]}, "constant", args.show_circuits
     )
-    testit({"nbits": 3, "values": [1, 3, 4, 6]}, "balanced", args.show_circuits)
-    testit({"nbits": 3, "values": [1, 2, 4, 7]}, "balanced", args.show_circuits)
-    print("All tests passed")
+    testit(
+        url, {"nbits": 3, "f": [1, 1, 1, 1, 1, 1, 1, 1]}, "constant", args.show_circuits
+    )
+    testit(
+        url,
+        {"nbits": 3, "f": [0, 1, 0, 1, 1, 0, 1, 1, 0]},
+        "balanced",
+        args.show_circuits,
+    )
+    testit(
+        url,
+        {"nbits": 3, "f": [0, 1, 1, 0, 1, 0, 0, 0, 1]},
+        "balanced",
+        args.show_circuits,
+    )
+
+    if url is None:
+        url = "local"
+    print(f"All tests passed ({url})")
+
+
+if __name__ == "__main__":
+    main()
