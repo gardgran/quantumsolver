@@ -75,7 +75,9 @@ def solve(data) -> dict:
         nbits = data["nbits"]
         fbits = [bool(x) for x in data["f"]]
         if 2**nbits != len(fbits):
-            return {"answer": f"invalid function length {len(fbits)} != 2^nbits {2**nbits}"}
+            return {
+                "answer": f"invalid function length {len(fbits)} != 2^nbits {2**nbits}"
+            }
 
     def f(x: int) -> bool:
         if x < 0 or x >= len(fbits):
