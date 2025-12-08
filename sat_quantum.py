@@ -3,6 +3,9 @@
 """This is a quantum solver for the SAT problem. It accepts a boolean
 expression and finds a set of subsitutions for the variables that
 produces a true result of the expression using Grover's algorithm.
+
+It is based on the tutorial on:
+https://qiskit-community.github.io/qiskit-algorithms/tutorials/07_grover_examples.html
 """
 
 import argparse
