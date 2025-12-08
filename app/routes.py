@@ -6,6 +6,7 @@ import deutsch_classical
 import bernstein_vazirani_quantum
 import deutsch_quantum
 import deutsch_jozsa_quantum
+import sat_quantum
 
 # pylint: disable=missing-function-docstring
 
@@ -41,3 +42,10 @@ def solver_deutsch_quantum():
         return "expected json input"
     data = request.json
     return deutsch_quantum.solve(data)
+
+@app.route('/sat-quantum', methods=['POST'])
+def solver_sat_quantum():
+    if not request.is_json:
+        return "expected json input"
+    data = request.json
+    return sat_quantum.solve(data)
