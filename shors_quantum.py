@@ -37,7 +37,7 @@ from fractions import Fraction
 import numpy as np
 import random
 import math
-import sympy
+# import sympy
 import matplotlib.pyplot as plt
 import argparse
 
@@ -199,11 +199,30 @@ class ShorAlgorithm:
         self.r = None
         self.qpe_circuit = None
 
+    def _check_perfect_power(self):
+        """
+        Checks if N is a perfect power (e.g., 9 = 3^2).
+        Returns factors if found, but does NOT stop the program flow.
+        """
+        k_max = int(math.log2(self.N))
+        for k in range(2, k_max + 1):
+            root = round(self.N ** (1 / k))
+            if root ** k == self.N:
+                return root, int(self.N // root)
+        return None
+
     def execute(self):
         print(f"--- Solving for N={self.N} ---")
         
-        # 1. Trivial Factor Checks
-        if self.N % 2 == 0: return 2, self.N // 2
+        # 1. Classical Pre-checks 
+        if self.N % 2 == 0: 
+            self._classical_factors = (2, self.N // 2)
+            print("[INFO] Even number detected.")
+        else:
+            self._classical_factors = self._check_perfect_power()
+            if self._classical_factors:
+                print(f"[INFO] Perfect power detected (Classical Answer: {self._classical_factors}).")
+                print("       Proceeding to Quantum Step for Visualization purposes...")
         
         # 2. Filter valid 'a' candidates
         candidates = [a for a in range(2, self.N) if math.gcd(a, self.N) == 1]
@@ -211,8 +230,6 @@ class ShorAlgorithm:
         if not candidates:
             print("[Error] No coprime candidates found (N might be prime).")
             return None
-            
-        print(f'[INFO] Coprime candidates for a: {candidates}')
 
         if self.max_attempts > 0:
             limit = min(self.max_attempts, len(candidates))
@@ -234,28 +251,35 @@ class ShorAlgorithm:
                 print(f'[Step 1] Chosen base a: {self.chosen_a}')
 
             # 3. Quantum Period Finding
-            print(f'[Step 2] {self.chosen_a} is coprime to {self.N}. Generating Quantum Circuit...')
+            print(f'[Step 2] Generating Quantum Circuit for a={self.chosen_a}...')
             
-            # Run the circuit (Visualization object created here)
-            success = self._quantum_period_finding()
+            # This populates self.qpe_circuit
+            quantum_success = self._quantum_period_finding()
             
-            if success:
-                # 4. Classical Post-Processing
-                factors = self._classical_postprocess()
-                if factors:
-                    return factors
+            # 4. Attempt Classical Factoring from Quantum Result
+            quantum_factors = None
+            if quantum_success:
+                quantum_factors = self._classical_postprocess()
+
+            # 5. Decision Logic
+            if quantum_factors:
+                print("[SUCCESS] Factors found via Quantum Period Finding.")
+                return quantum_factors
+            elif self._classical_factors:
+                # If quantum failed (e.g. N=9), but we have classical backup
+                print(f"[WARN] Quantum factoring failed (mathematical constraint).")
+                print(f"[FALLBACK] Returning classical factors: {self._classical_factors}")
+                return self._classical_factors
             
-            # If we failed (either QPE failed or Factors were trivial), remove 'a' and try again
+            # Retry logic
             if self.chosen_a in candidates:
                 candidates.remove(self.chosen_a)
             
-            # Check if we ran out of candidates prematurely
             if not candidates:
-                print("[WARN] Ran out of unique candidates to try.")
                 break
             
-        print(f'[FAIL] Could not find factors after {attempts_count} attempts.')
-        return None
+        print(f'[FAIL] Could not find factors via Quantum methods.')
+        return self._classical_factors if self._classical_factors else None
     
     def _quantum_period_finding(self):
         # Build Circuit
@@ -352,7 +376,7 @@ def solve(N: int) -> dict:
         try:
             qasm_string = qiskit.qasm2.dumps(shor.qpe_circuit)
         except Exception:
-            qasm_string = "Error generating QASM"
+            qasm_string = "QASM String WIP"
 
     return {"answer": factors, "qasm": qasm_string}
 
