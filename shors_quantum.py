@@ -1,18 +1,20 @@
 """
 Shor's Algorithm Quantum Solver
+George Lake - 12/2025
 
 This is a quantum solver simulation for shor's algorthim.
 The quantum simulation is done during the Quantum Phase Estimation (QPE) to find the period.
 Once the period is found. The factors of N are classically solved.
 
-The quantum simulation only works (in a reasonable time frame) for small numbers ( < 7 bits). 
+The quantum simulation only works (in a reasonable time frame) for small numbers ( < 10 bits). 
 Above that, the program will not attempt to run.
 
-George Lake - 12/2025
+This program can be ran two different ways.
+- N=15 - Manual solver, that also returns a visualization of the actual gates inside the UGate
+- N!=15 - Regular solver, creates a computational circuit for solving the problem, and a dummy circuit for visualization
 
 Notes about selecting N:
-N=15 (4 bits): This case is special. It is set up to manually build a Quantum Circuit
-so that the internal gates to the UGate are visibile. All other cases the UGate is a black box.
+N=15 (4 bits): This case is special
 
 N=35 (6 bits): 3 \times 6 = 18 qubits.
 Memory: ~4 MB. Very Fast.
@@ -29,7 +31,8 @@ Memory: ~16 GB. Maximum for most laptops.
 N=2047 (11 bits): 3 \times 11 = 33 qubits.
 Memory: ~128 GB. Impossible for most.
 """
-from qiskit import QuantumCircuit, transpile
+from qiskit import QuantumCircuit, transpile, QuantumRegister, ClassicalRegister
+from qiskit.circuit import Gate
 from qiskit.circuit.library import QFTGate, UnitaryGate
 from qiskit_aer import AerSimulator
 import qiskit.qasm2
@@ -37,7 +40,6 @@ from fractions import Fraction
 import numpy as np
 import random
 import math
-# import sympy
 import matplotlib.pyplot as plt
 import argparse
 
@@ -66,7 +68,7 @@ class ShorCircuit(QuantumCircuit):
         dim_target = 2 ** self.n_target
         U_matrix = np.zeros((dim_target, dim_target), dtype=complex)
         
-        # Calculate a^(power_of_a) mod N efficiently
+        # Calculate a^(power_of_a) mod N
         effective_multiplier = pow(self.a, power_of_a, self.N)
         
         for y in range(dim_target):
@@ -188,8 +190,64 @@ class ShorN15Circuit(QuantumCircuit):
         result = simulator.run(transpiled_circuit, shots=1, memory=True).result()
         return result
 
+class ShorDisplayCircuit(QuantumCircuit):
+    """
+    A Dummy circuit strictly for visualization/QASM.
+    It uses Opaque gates that look nice but cannot be simulated
+    """
+    def __init__(self, a, N):
+        self.n_target = N.bit_length()
+        self.n_count = 2 * self.n_target
+
+        # Create named registers for readability
+        qr_count = QuantumRegister(self.n_count, 'phase')
+        qr_target = QuantumRegister(self.n_target, 'work')
+        cr = ClassicalRegister(self.n_count, 'measure')
+
+        super().__init__(qr_count, qr_target, cr)
+
+        self.a = a
+        self.N = N
+
+        self._build_visual_only()
+
+    def _build_visual_only(self):
+        # 1. Initialization
+        self.h(self.qubits[:self.n_count])
+        self.x(self.qubits[-1])
+
+        # 2. Add Opaque UGates
+        for i in range(self.n_count):
+            power = 2**i
+            label = f"U^{power}_{self.N}" 
+            
+            oracle_block = QuantumCircuit(self.n_target + 1, name=label)
+            
+            oracle_gate = oracle_block.to_gate()
+            oracle_gate.label = label 
+            
+            control_qubit = [self.qubits[i]]
+            target_qubits = self.qubits[self.n_count:]
+            
+            self.append(oracle_gate, control_qubit + target_qubits)
+
+        # 3. Add Opaque Inverse QFT
+        iqft_block = QuantumCircuit(self.n_count, name="Inverse_QFT")
+        iqft_gate = iqft_block.to_gate()
+        iqft_gate.label = "Inverse QFT"
+
+        self.append(iqft_gate, self.qubits[:self.n_count])
+
+        # 4. Measure
+        self.measure(self.qubits[:self.n_count], self.clbits)
+
 
 class ShorAlgorithm:
+    """
+    Completes Shor's Algorithm
+    Creates a circuit object
+    After QPE, factors based on the period
+    """
     def __init__(self, N, circuit_class=ShorCircuit, max_attempts=-1, simulator=None):
         self.N = N
         self.circuit_class = circuit_class
@@ -252,8 +310,6 @@ class ShorAlgorithm:
 
             # 3. Quantum Period Finding
             print(f'[Step 2] Generating Quantum Circuit for a={self.chosen_a}...')
-            
-            # This populates self.qpe_circuit
             quantum_success = self._quantum_period_finding()
             
             # 4. Attempt Classical Factoring from Quantum Result
@@ -266,7 +322,6 @@ class ShorAlgorithm:
                 print("[SUCCESS] Factors found via Quantum Period Finding.")
                 return quantum_factors
             elif self._classical_factors:
-                # If quantum failed (e.g. N=9), but we have classical backup
                 print(f"[WARN] Quantum factoring failed (mathematical constraint).")
                 print(f"[FALLBACK] Returning classical factors: {self._classical_factors}")
                 return self._classical_factors
@@ -324,7 +379,6 @@ class ShorAlgorithm:
             print(f'[Info] Period r={self.r} is odd. Cannot split N. Retrying...')
             return None
 
-        # Guess factors using gcd(a^(r/2) ± 1, N)
         val = pow(self.chosen_a, self.r // 2, self.N)
         
         guess_1 = math.gcd(val - 1, self.N)
@@ -343,10 +397,12 @@ class ShorAlgorithm:
         print("[Info] Guesses were trivial factors (1 or N). Retrying...")
         return None
     
-def solve(N: int) -> dict:
+def solve(N: int | dict) -> dict:
     """
-    Main entry point
-    Determine which case is given by the input
+    Main entry point:
+    - Runs the math on the real circuit.
+    - For N=15: Returns QASM of the REAL circuit (educational gates).
+    - For N!=15: Returns QASM of the DUMMY circuit (clean black boxes).
 
     Returns a JSON-ready dictionary with:
     {
@@ -354,6 +410,8 @@ def solve(N: int) -> dict:
         "qasm" : "..."    
     }
     """
+    N = N["N"] if isinstance(N, dict) else N
+
     if not isinstance(N, int):
         return {"answer": "Input must be an integer", "qasm": "NA"}
     
@@ -362,24 +420,32 @@ def solve(N: int) -> dict:
     if n_bits > 9:
         return {"answer": "Bit Length too Long", "qasm": "NA"}  
     
+    # 1. Run Calculations (Real Circuit)
     if N == 15:
         selected_circuit = ShorN15Circuit
     else:
         selected_circuit = ShorCircuit
 
     simulator = AerSimulator()
-    shor = ShorAlgorithm(N, circuit_class=selected_circuit, simulator=simulator)
-    factors = shor.execute()
+    shor_calc = ShorAlgorithm(N, circuit_class=selected_circuit, simulator=simulator)
+    factors = shor_calc.execute()
 
-    # Check if quantum circuit was made
-    if shor.qpe_circuit:
-        try:
-            qasm_string = qiskit.qasm2.dumps(shor.qpe_circuit)
-        except Exception:
-            qasm_string = "QASM String WIP"
+    # 2. Generate QASM based on N
+    qasm_string = "Error generating QASM"
+    
+    try:
+        if N == 15 and shor_calc.qpe_circuit:
+            qasm_string = qiskit.qasm2.dumps(shor_calc.qpe_circuit)
+            
+        else:
+            chosen_a = shor_calc.chosen_a if shor_calc.chosen_a else 2
+            display_circuit = ShorDisplayCircuit(a=chosen_a, N=N)
+            qasm_string = qiskit.qasm2.dumps(display_circuit)
+            
+    except Exception as e:
+        qasm_string = f"Error generating QASM: {e}"
 
     return {"answer": factors, "qasm": qasm_string}
-
 
 
 if __name__ == "__main__":
